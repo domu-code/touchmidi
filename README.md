@@ -15,7 +15,29 @@ Open [Releases](https://github.com/domu-code/touchmidi/releases/latest) and down
 - **Multiple pages**: create, switch, rename, duplicate, delete.
 - **Project memory**: autosave in Android local preferences, export/import JSON via Android document picker.
 - **Multitouch**: independent finger gestures in Play, note-off on release, MIDI panic.
+- **Safe bottom controls**: MIDI destination and EDIT/PLAY buttons have been moved away from the Android notification shade gesture area.
 - **USB MIDI and Android MIDI virtual ports** using the native Android MidiManager API. Android-discovered Bluetooth MIDI ports are also selectable if exposed by the operating system or another service.
+
+## On-device piano roll
+
+Tap **PIANO ROLL** in the fixed bottom toolbar. It opens a distinct scrolling note editor and loop sequencer. The timeline can be resized from 1 to 1,000,000 sixteenth-note steps; the view only renders the currently visible cells. Subtle gridlines mark individual steps, medium lines every **4**, and strong lines every **8**. Each 16 steps represents one 4/4 bar.
+
+- Tap an empty cell to add a note; tap a note to delete it.
+- Drag a note to move it or drag its right edge to resize its duration.
+- Drag the top ruler to pan horizontally; drag the piano keys on the left to scroll octaves.
+- Set BPM (20–300), channel (1–16), note velocity, sequence length, and horizontal zoom.
+- Start/stop loop playback, with MIDI Note On/Off on an Android MIDI output port.
+- All note data is saved with project JSON and included in exports.
+
+The sequencer runs on Android's main-thread scheduler and is suitable for experimentation, not guaranteed sample-accurate timing. External MIDI clock, recording live MIDI into the roll, velocity lanes, and multiple independent roll patterns are planned improvements.
+
+## LOOM preset (M7.7.0)
+
+Open **PROJECT → Load LOOM M7.7**. Five edit-ready CC pages follow LOOM's real Plaits/Braids, filter/mixer, DMG/sampler, FX/Beads, Tides and Rings/Air parameters. A performance page adds keyboard, mod wheel (CC1), pitch bend, and sustain (CC64). This version of LOOM has **MIDI learn**, not fixed factory CC numbers. The suggested CC20–80 control assignments therefore require learning in LOOM by right-clicking the corresponding parameter and moving its TouchMIDI control. See [LOOM CC Learn Map](docs/LOOM_CC_MAP.md).
+
+## MetroGaia preset (v6.9)
+
+Open **PROJECT → Load MetroGaia v6.9**. The preset reproduces MetroGaia's *incoming* motion range CCs 20–35, gate/toggle CCs 60–63 and mod wheel CC1. Four XY pads use CC44–51, which are MetroGaia's *outgoing* XY motion defaults. Those XY pads do **not** directly control MetroGaia's internal parameters without MIDI routing or additional mapping. The preset includes keyboard, pitch bend and pressure controllers. See [MetroGaia MIDI Map](docs/METROGAIA_MIDI_MAP.md).
 
 ## NTS-1 mk1 preset
 
@@ -39,4 +61,4 @@ Continuous integration automatically compiles the project when changes land on m
 
 ## Limitations
 
-This is an initial Android alpha. Connection to physical MIDI hardware has not been verified on a device, and there is no automated Android instrumented test suite. External Bluetooth LE MIDI scanning/pairing, feedback from MIDI devices, custom SysEx, and a clock generator are future enhancements. Export your JSON layouts before reinstalling: app storage can be removed on uninstall.
+This is an early Android alpha. Connection to physical MIDI hardware has not been verified on a device, and there is no automated Android instrumented test suite. External Bluetooth LE MIDI scanning/pairing, feedback from MIDI devices, custom SysEx, and a clock generator are future enhancements. Export your JSON layouts before reinstalling: app storage can be removed on uninstall.

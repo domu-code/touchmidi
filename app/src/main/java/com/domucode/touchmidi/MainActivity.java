@@ -11,6 +11,7 @@ import android.view.View;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -42,11 +43,14 @@ public final class MainActivity extends Activity {
     private Model.Project layout;
     private MidiOutput midi;
     private ControllerView controller;
+    private PianoRollView piano;
+    private boolean rollMode = false;
     private boolean editMode = false;
     private boolean snap = false;
     private LinearLayout pageTabs;
+    private HorizontalScrollView controllerActions, pagesScroll, rollToolbar;
     private TextView titleText, midiText;
-    private Button modeButton, inspectButton, duplicateButton, removeButton;
+    private Button modeButton, rollButton, rollPlayButton, inspectButton, duplicateButton, removeButton;
     private int newCount=0;
 
     public Model.Project project() { return layout; }
@@ -100,46 +104,90 @@ public final class MainActivity extends Activity {
     }
 
     private void buildUI() {
-        LinearLayout root=new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(DARK);
-        root.setPadding(dp(6),dp(4),dp(6),dp(3));
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(DARK);
+        root.setPadding(dp(6),dp(5),dp(6),dp(6));
 
-        LinearLayout header=new LinearLayout(this);
-        header.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        // Android 15+ can draw edge-to-edge. Keep every interactive toolbar
+        // outside the system status/navigation gesture regions.
+        if (android.os.Build.VERSION.SDK_INT >= 35) {
+            root.setOnApplyWindowInsetsListener((v,insets)->{
+                android.graphics.Insets bars=insets.getInsets(
+                        android.view.WindowInsets.Type.systemBars());
+                root.setPadding(dp(6),bars.top+dp(5),dp(6),bars.bottom+dp(7));
+                return insets;
+            });
+        }
+
         titleText=text("TOUCHMIDI",16,WHITE);
         titleText.setTypeface(null,android.graphics.Typeface.BOLD);
-        titleText.setSingleLine(true);titleText.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        LinearLayout.LayoutParams titleP=new LinearLayout.LayoutParams(0,dp(42),1);
-        titleText.setLayoutParams(titleP);header.addView(titleText);
-        header.addView(button("MIDI",this::showMidiDevices));
-        modeButton=button("EDIT",this::toggleMode);header.addView(modeButton);
-        root.addView(header);
+        titleText.setSingleLine(true);
+        titleText.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        titleText.setPadding(dp(9),0,0,0);
+        root.addView(titleText,new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,dp(34)));
 
-        HorizontalScrollView actionsScroll=new HorizontalScrollView(this);
-        actionsScroll.setHorizontalScrollBarEnabled(false);
-        LinearLayout actions=new LinearLayout(this); actions.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        pagesScroll=new HorizontalScrollView(this);
+        pagesScroll.setHorizontalScrollBarEnabled(false);
+        pageTabs=new LinearLayout(this);
+        pagesScroll.addView(pageTabs);
+        root.addView(pagesScroll);
+
+        FrameLayout stage=new FrameLayout(this);
+        controller=new ControllerView(this);
+        piano=new PianoRollView(this);
+        stage.addView(controller,new FrameLayout.LayoutParams(-1,-1));
+        stage.addView(piano,new FrameLayout.LayoutParams(-1,-1));
+        root.addView(stage,new LinearLayout.LayoutParams(-1,0,1));
+
+        rollToolbar=new HorizontalScrollView(this);
+        rollToolbar.setHorizontalScrollBarEnabled(false);
+        LinearLayout rollActions=new LinearLayout(this);
+        rollActions.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        rollPlayButton=button("▶ PLAY",()->piano.togglePlayback());
+        rollActions.addView(rollPlayButton);
+        rollActions.addView(button("STEPS",this::changeRollLength));
+        rollActions.addView(button("BPM",this::changeRollBpm));
+        rollActions.addView(button("CHANNEL",this::changeRollChannel));
+        rollActions.addView(button("VELOCITY",this::changeRollVelocity));
+        rollActions.addView(button("ZOOM -",()->piano.zoom(.75f)));
+        rollActions.addView(button("ZOOM +",()->piano.zoom(1.33333f)));
+        rollActions.addView(button("CLEAR",this::clearRoll));
+        rollActions.addView(button("HELP",this::rollHelp));
+        rollToolbar.addView(rollActions);
+        root.addView(rollToolbar);
+
+        // Edit tools are now at the bottom, below the working canvas.
+        // This prevents the Android notification-shade gesture from
+        // intercepting MIDI/EDIT and other important buttons.
+        controllerActions=new HorizontalScrollView(this);
+        controllerActions.setHorizontalScrollBarEnabled(false);
+        LinearLayout actions=new LinearLayout(this);
+        actions.setGravity(android.view.Gravity.CENTER_VERTICAL);
         actions.addView(button("+ ADD",this::showAddDialog));
         inspectButton=button("INSPECT",this::showInspector);actions.addView(inspectButton);
         duplicateButton=button("COPY",this::duplicateSelected);actions.addView(duplicateButton);
         removeButton=button("DELETE",this::deleteSelected);actions.addView(removeButton);
         actions.addView(button("PAGES",this::pageOptions));
         actions.addView(button("PROJECT",this::projectOptions));
-        actionsScroll.addView(actions);root.addView(actionsScroll);
+        controllerActions.addView(actions);
+        root.addView(controllerActions);
 
-        HorizontalScrollView pagesScroll=new HorizontalScrollView(this);
-        pagesScroll.setHorizontalScrollBarEnabled(false);
-        pageTabs=new LinearLayout(this);
-        pagesScroll.addView(pageTabs);root.addView(pagesScroll);
-
-        controller=new ControllerView(this);
-        root.addView(controller,new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,0,1));
+        LinearLayout bottomBar=new LinearLayout(this);
+        bottomBar.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        Button midiButton=button("MIDI",this::showMidiDevices);
+        bottomBar.addView(midiButton);
+        modeButton=button("EDIT",this::toggleMode);
+        bottomBar.addView(modeButton);
+        rollButton=button("PIANO ROLL",this::switchWorkspace);
+        bottomBar.addView(rollButton);
+        root.addView(bottomBar);
 
         midiText=text("NO MIDI OUTPUT",11,MUTED);
         midiText.setSingleLine(true);
         midiText.setPadding(dp(7),0,dp(7),0);
-        root.addView(midiText,new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,dp(23)));
+        root.addView(midiText,new LinearLayout.LayoutParams(-1,dp(23)));
         setContentView(root);
         refreshAll();
     }
@@ -147,9 +195,87 @@ public final class MainActivity extends Activity {
     private void refreshAll() {
         titleText.setText("TOUCHMIDI  /  "+layout.title);
         modeButton.setText(editMode?"PLAY":"EDIT");
+        rollButton.setText(rollMode?"CONTROLS":"PIANO ROLL");
+        modeButton.setVisibility(rollMode?View.GONE:View.VISIBLE);
+        rollToolbar.setVisibility(rollMode?View.VISIBLE:View.GONE);
+        controllerActions.setVisibility(rollMode?View.GONE:View.VISIBLE);
+        pagesScroll.setVisibility(rollMode?View.GONE:View.VISIBLE);
+        controller.setVisibility(rollMode?View.GONE:View.VISIBLE);
+        piano.setVisibility(rollMode?View.VISIBLE:View.GONE);
         onSelectionChanged();
         rebuildPages();
         controller.invalidate();
+        piano.invalidate();
+        onRollPlaybackChanged();
+    }
+
+    private void switchWorkspace() {
+        controller.clearPointers();
+        if (rollMode) piano.stop();
+        rollMode=!rollMode;
+        refreshAll();
+    }
+
+    public void onRollPlaybackChanged() {
+        if(rollPlayButton!=null&&piano!=null)
+            rollPlayButton.setText(piano.isPlaying()?"■ STOP":"▶ PLAY");
+        updateMidiStatus();
+    }
+
+    private void editRollInt(String title,int value,int min,int max,java.util.function.IntConsumer apply) {
+        EditText input=new EditText(this);
+        input.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        input.setText(Integer.toString(value));
+        input.setSingleLine(true);
+        input.selectAll();
+        new AlertDialog.Builder(this).setTitle(title)
+                .setMessage("Allowed range: "+min+" to "+max)
+                .setView(input)
+                .setNegativeButton("CANCEL",null)
+                .setPositiveButton("APPLY",(d,w)->{
+                    int number=readInt(input,-1);
+                    if(number<min||number>max){
+                        Toast.makeText(this,"Enter a number from "+min+" to "+max,Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                    piano.stop();
+                    apply.accept(number);
+                    saveLayout();
+                    piano.invalidate();
+                    updateMidiStatus();
+                }).show();
+    }
+
+    private void changeRollLength() {
+        editRollInt("SEQUENCE LENGTH (16TH-NOTE STEPS)",layout.roll.steps,1,1000000,
+                n->layout.roll.resize(n));
+    }
+
+    private void changeRollBpm() {
+        editRollInt("TEMPO (BPM)",layout.roll.bpm,20,300,n->layout.roll.bpm=n);
+    }
+
+    private void changeRollChannel() {
+        editRollInt("MIDI CHANNEL",layout.roll.channel,1,16,n->layout.roll.channel=n);
+    }
+
+    private void changeRollVelocity() {
+        editRollInt("NEW NOTE VELOCITY",layout.roll.velocity,1,127,n->layout.roll.velocity=n);
+    }
+
+    private void clearRoll() {
+        new AlertDialog.Builder(this).setTitle("CLEAR PIANO ROLL?")
+                .setMessage("Delete all notes in the current sequence?")
+                .setNegativeButton("CANCEL",null)
+                .setPositiveButton("CLEAR",(d,w)->{
+                    piano.stop();layout.roll.notes.clear();saveLayout();piano.invalidate();
+                }).show();
+    }
+
+    private void rollHelp() {
+        new AlertDialog.Builder(this).setTitle("PIANO ROLL")
+                .setMessage("A step is one 16th note. Thin vertical lines mark each step; stronger lines mark every FOUR steps, and the strongest lines mark every EIGHT steps. Each 16 steps is one 4/4 bar.\\n\\nTap an empty grid cell to add a note. Tap a note to remove it. Drag a note to move it. Drag its right edge to change its duration. Drag the TOP RULER to scroll through the timeline, or the LEFT KEYBOARD to scroll through pitches. ZOOM changes the number of visible steps.\\n\\nSTEPS accepts any length from 1 to 1,000,000. Playback loops at the configured length and sends MIDI Note On/Off on the selected channel. BPM and note velocity are adjustable. Patterns save with the project and are included in JSON exports.\\n\\nPLAY requires a connected MIDI destination. Stop before leaving the piano roll.")
+                .setPositiveButton("CLOSE",null).show();
     }
 
     public void onSelectionChanged() {
@@ -164,10 +290,16 @@ public final class MainActivity extends Activity {
     }
 
     public void updateMidiStatus() {
-        if(midiText!=null && midi!=null) midiText.setText(midi.getStatus());
+        if(midiText!=null && midi!=null) {
+            String info=midi.getStatus();
+            if(rollMode&&layout!=null)info+="  |  ROLL: "+layout.roll.steps+" STEPS · "+
+                    layout.roll.bpm+" BPM · CH"+layout.roll.channel;
+            midiText.setText(info);
+        }
     }
 
     private void toggleMode() {
+        if(rollMode)return;
         controller.clearPointers();editMode=!editMode;
         if(!editMode) controller.select(null);
         refreshAll();
@@ -420,35 +552,58 @@ public final class MainActivity extends Activity {
 
     private void projectOptions() {
         new AlertDialog.Builder(this).setTitle("PROJECT / PRESETS")
-                .setItems(new String[]{"New empty project","Load KORG NTS-1 MK1","Rename project",
-                        "Export layout JSON","Import layout JSON",
+                .setItems(new String[]{
+                        "New empty project",
+                        "Load KORG NTS-1 MK1",
+                        "Load LOOM M7.7 (MIDI LEARN required)",
+                        "Load MetroGaia v6.9",
+                        "Rename project",
+                        "Export layout JSON",
+                        "Import layout JSON",
                         "Snap to grid: "+(snap?"ON":"OFF"),
-                        "All notes off (MIDI panic)","Help / MIDI setup"},
-                        (d,which)->{
-                            switch(which) {
-                                case 0:confirmReplace(false);break;
-                                case 1:confirmReplace(true);break;
-                                case 2:renameProject();break;
-                                case 3:exportLayout();break;
-                                case 4:importLayout();break;
-                                case 5:
-                                    snap=!snap;getPreferences(MODE_PRIVATE).edit().putBoolean("snap",snap).apply();
-                                    Toast.makeText(this,"Grid snapping "+(snap?"enabled":"disabled"),Toast.LENGTH_SHORT).show();
-                                    break;
-                                case 6:panic();break;
-                                case 7:showHelp();break;
-                            }
-                        }).show();
+                        "All notes off (MIDI panic)",
+                        "Help / MIDI setup"
+                    },(d,which)->{
+                        switch(which) {
+                            case 0:confirmReplace(0);break;
+                            case 1:confirmReplace(1);break;
+                            case 2:confirmReplace(2);break;
+                            case 3:confirmReplace(3);break;
+                            case 4:renameProject();break;
+                            case 5:exportLayout();break;
+                            case 6:importLayout();break;
+                            case 7:
+                                snap=!snap;
+                                getPreferences(MODE_PRIVATE).edit().putBoolean("snap",snap).apply();
+                                Toast.makeText(this,"Grid snapping "+(snap?"enabled":"disabled"),Toast.LENGTH_SHORT).show();
+                                break;
+                            case 8:panic();break;
+                            case 9:showHelp();break;
+                        }
+                    }).show();
     }
 
-    private void confirmReplace(boolean nts) {
+    private void confirmReplace(int preset) {
         new AlertDialog.Builder(this).setTitle("REPLACE PROJECT?")
-                .setMessage("This will replace your current on-device layout. Export your project first to keep a copy.")
+                .setMessage("Your current layout and piano roll will be replaced. Export your JSON project first to keep a copy.")
                 .setNegativeButton("CANCEL",null)
                 .setPositiveButton("REPLACE",(d,w)->{
+                    piano.stop();
                     controller.clearPointers();
-                    layout=nts?Presets.nts1():Presets.empty();
-                    controller.select(null);saveLayout();refreshAll();
+                    if(preset==1)layout=Presets.nts1();
+                    else if(preset==2)layout=Presets.loom();
+                    else if(preset==3)layout=Presets.metroGaia();
+                    else layout=Presets.empty();
+                    controller.select(null);
+                    piano.projectChanged();
+                    saveLayout();
+                    refreshAll();
+                    if(preset==2)Toast.makeText(this,
+                            "LOOM uses MIDI learn. Assign each CC to its named parameter in LOOM.",
+                            Toast.LENGTH_LONG).show();
+                    if(preset==3)Toast.makeText(this,
+                            "MetroGaia CC20-35 and 60-63 receive directly; XY44-51 need routing.",
+                            Toast.LENGTH_LONG).show();
                 }).show();
     }
 
@@ -502,7 +657,7 @@ public final class MainActivity extends Activity {
                     }
                 }
                 Model.Project imported=Model.Project.fromJson(buffer.toString("UTF-8"));
-                controller.clearPointers();layout=imported;controller.select(null);
+                piano.stop();controller.clearPointers();layout=imported;controller.select(null);piano.projectChanged();
                 saveLayout();refreshAll();
                 Toast.makeText(this,"Layout imported",Toast.LENGTH_SHORT).show();
             }
@@ -538,11 +693,12 @@ public final class MainActivity extends Activity {
 
     private void showHelp() {
         new AlertDialog.Builder(this).setTitle("TOUCHMIDI · HELP")
-                .setMessage("EDIT MODE\nUse + ADD to create a knob, vertical fader, slider, button, toggle or XY pad. Tap an object to select it; drag to reposition. Drag its white lower-right handle to resize. INSPECT sets dimensions as percentages, colour and MIDI mapping.\n\nPLAY MODE\nPositions are locked. Multiple fingers can operate controls simultaneously. Buttons are momentary, toggles latch, knobs respond to vertical drags.\n\nMIDI\nConnect a USB MIDI device via an OTG adapter, or use an Android-visible virtual MIDI output. Tap MIDI to pick an input port on the destination device. 'Connected' must be shown at the bottom. NTS-1 mk1 requires MIDI RX ShortMessage = ON and the matching channel.\n\nPAGES / PROJECT\nAdd as many pages as needed, rename/duplicate pages, and export/import .json projects. All edits auto-save on the device. The Korg preset covers all 29 documented CCs plus a 12-key keyboard.\n\nSource: Korg NTS-1 mk1 MIDI Implementation Chart (2019).")
+                .setMessage("EDIT MODE\nUse + ADD to create a knob, vertical fader, slider, button, toggle or XY pad. Tap an object to select it; drag to reposition. Drag its white lower-right handle to resize. INSPECT sets dimensions as percentages, colour and MIDI mapping.\n\nPLAY MODE\nPositions are locked. Multiple fingers can operate controls simultaneously. Buttons are momentary, toggles latch, knobs respond to vertical drags.\n\nMIDI\nConnect a USB MIDI device via an OTG adapter, or use an Android-visible virtual MIDI output. Tap MIDI to pick an input port on the destination device. 'Connected' must be shown at the bottom. NTS-1 mk1 requires MIDI RX ShortMessage = ON and the matching channel.\n\nPAGES / PROJECT\nAdd as many pages as needed, rename/duplicate pages, and export/import .json projects. All edits auto-save on the device. PIANO ROLL opens a variable-length 16th-note sequencer with 4-step/8-step grid accents. The Korg preset covers all 29 documented CCs plus a 12-key keyboard. LOOM M7.7 includes a curated MIDI-learn mapping. MetroGaia v6.9 uses documented incoming CC20-35 and CC60-63; its XY44-51 send-side defaults require external routing.\n\nSource: Korg NTS-1 mk1 MIDI Implementation Chart (2019).")
                 .setPositiveButton("CLOSE",null).show();
     }
 
     @Override protected void onPause() {
+        if(piano!=null)piano.stop();
         if(controller!=null)controller.clearPointers();
         saveLayout();
         super.onPause();

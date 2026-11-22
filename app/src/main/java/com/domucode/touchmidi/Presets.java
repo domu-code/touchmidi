@@ -114,4 +114,143 @@ public final class Presets {
         }
         return project;
     }
+    private static void grid(Model.Page page, String[] labels, int[] numbers, String[] kinds, int colour) {
+        int cols = 4;
+        int rows = Math.max(1, (int)Math.ceil(labels.length / (float)cols));
+        for (int i=0; i<labels.length; i++) {
+            String kind = kinds == null ? "KNOB" : kinds[i];
+            Model.Control c = cc(page, labels[i], numbers[i], kind, i%cols, i/cols, cols, rows, colour);
+            if ("TOGGLE".equals(kind)) c.value=0;
+        }
+    }
+
+    private static void keys(Model.Page page) {
+        String[] names={"C4","C#4","D4","D#4","E4","F4","F#4","G4","G#4","A4","A#4","B4"};
+        for(int i=0;i<12;i++) {
+            Model.Control c=new Model.Control();
+            c.label=names[i];
+            c.kind="BUTTON";
+            c.message="NOTE";
+            c.number=60+i;
+            c.value=105;
+            c.color=(i==1||i==3||i==6||i==8||i==10)?0xffbb9afa:0xff49d8c7;
+            c.x=.018f+i*.0803f;
+            c.y=.43f;c.w=.074f;c.h=.50f;
+            c.normalize();
+            page.controls.add(c);
+        }
+    }
+
+    /**
+     * LOOM M7.7.0 references real parameter names from the original source.
+     * It uses MIDI learn, so these CC assignments are a suggested learn map,
+     * not factory-standard numbers.
+     */
+    public static Model.Project loom() {
+        Model.Project project=new Model.Project();
+        project.title="LOOM M7.7 · MIDI LEARN";
+
+        Model.Page voices=new Model.Page("PL / BRAIDS");
+        project.pages.add(voices);
+        grid(voices,new String[]{
+                "PL HARMONICS","PL TIMBRE","PL MORPH","PL LEVEL",
+                "BR HARMONICS","BR TIMBRE","BR MORPH","BR LEVEL",
+                "PL DECAY","PL COLOUR","BR DECAY","BR COLOUR"
+            },new int[]{20,21,22,23,24,25,26,27,28,29,30,31},null,0xff49d8c7);
+
+        Model.Page filter=new Model.Page("FILTER / MIX");
+        project.pages.add(filter);
+        grid(filter,new String[]{
+                "CUTOFF","RESONANCE","FILTER MODE","FILTER MORPH",
+                "FILTER SLOPE","FILTER WET","PL PAN","BR PAN",
+                "DMG LEVEL","SAMPLE LEVEL","RINGS LEVEL","MASTER"
+            },new int[]{32,33,34,35,36,37,38,39,40,41,42,43},null,0xffffb56e);
+
+        Model.Page dmg=new Model.Page("DMG / SAMPLE");
+        project.pages.add(dmg);
+        grid(dmg,new String[]{
+                "DMG WAVE SCAN","DMG WIDTH","DMG JITTER","DMG FOLD",
+                "DMG FILTER CUT","DMG FILTER RES","DMG PAN","SAMPLE PAN",
+                "GRAIN SIZE","GRAIN DENSITY","SAMPLE FINE","DMG WRAP"
+            },new int[]{44,45,46,47,48,49,50,51,52,53,54,55},null,0xff71b8ff);
+
+        Model.Page fx=new Model.Page("FX / BEADS");
+        project.pages.add(fx);
+        grid(fx,new String[]{
+                "DRIVE MIX","CHORUS RATE","CHORUS DEPTH","CHORUS MIX",
+                "DELAY TIME","DELAY FEEDBACK","DELAY MIX","BEADS TIME",
+                "BEADS SIZE","BEADS DENSITY","BEADS MIX","REVERB MIX"
+            },new int[]{56,57,58,59,60,61,62,63,65,66,67,68},null,0xffbb9afa);
+
+        Model.Page mod=new Model.Page("TIDES / VOICES");
+        project.pages.add(mod);
+        grid(mod,new String[]{
+                "TIDES 1 RATE","TIDES 1 SHAPE","TIDES 1 SLOPE","TIDES 1 SMOOTH",
+                "TIDES 2 RATE","TIDES 2 SHAPE","TIDES 2 SLOPE","TIDES 2 SMOOTH",
+                "RINGS STRUCT","RINGS BRIGHT","RINGS DAMPING","AIR BREATH"
+            },new int[]{69,70,71,72,73,74,75,76,77,78,79,80},null,0xffa4dd77);
+
+        Model.Page performance=new Model.Page("PERFORMANCE");
+        project.pages.add(performance);
+        Model.Control wheel=cc(performance,"MOD WHEEL",1,"FADER",0,0,4,3,0xff71b8ff);
+        wheel.value=0;
+        Model.Control pitch=cc(performance,"PITCH BEND",0,"SLIDER",1,0,4,3,0xffffb56e);
+        pitch.message="PITCH";pitch.value=64;
+        Model.Control hold=cc(performance,"SUSTAIN",64,"TOGGLE",2,0,4,3,0xff49d8c7);
+        hold.value=0;
+        keys(performance);
+        return project;
+    }
+
+    /**
+     * MetroGaia 6.9 responds to CC20-35 (motion range sliders),
+     * CC60-63 (four gates), and CC1 (mod wheel).
+     * CC44-51 are its configured outgoing XY motion assignments.
+     */
+    public static Model.Project metroGaia() {
+        Model.Project project=new Model.Project();
+        project.title="METROGAIA V6.9";
+
+        Model.Page rangesA=new Model.Page("RANGES 1–4");
+        project.pages.add(rangesA);
+        grid(rangesA,new String[]{
+                "CH1 X MIN","CH1 X MAX","CH1 Y MIN","CH1 Y MAX",
+                "CH2 X MIN","CH2 X MAX","CH2 Y MIN","CH2 Y MAX"
+            },new int[]{20,21,22,23,24,25,26,27},null,0xff49d8c7);
+
+        Model.Page rangesB=new Model.Page("RANGES 5–8");
+        project.pages.add(rangesB);
+        grid(rangesB,new String[]{
+                "CH3 X MIN","CH3 X MAX","CH3 Y MIN","CH3 Y MAX",
+                "CH4 X MIN","CH4 X MAX","CH4 Y MIN","CH4 Y MAX"
+            },new int[]{28,29,30,31,32,33,34,35},null,0xffffb56e);
+
+        Model.Page xy=new Model.Page("MOTION XY");
+        project.pages.add(xy);
+        for(int i=0;i<4;i++) {
+            Model.Control c=cc(xy,"MOTION "+(i+1)+" XY",44+i*2,"XY",
+                    i%2,i/2,2,2,0xffbb9afa);
+            c.second=45+i*2;
+            c.value=64;c.value2=64;
+        }
+
+        Model.Page gates=new Model.Page("GATES / KEYS");
+        project.pages.add(gates);
+        for(int i=0;i<4;i++) {
+            Model.Control c=cc(gates,"GATE "+(i+1),60+i,"TOGGLE",i,0,4,3,0xffa4dd77);
+            c.value=0;
+        }
+        keys(gates);
+
+        Model.Page expression=new Model.Page("EXPRESSION");
+        project.pages.add(expression);
+        Model.Control wheel=cc(expression,"MOD WHEEL",1,"FADER",0,0,3,1,0xff71b8ff);
+        wheel.value=0;
+        Model.Control pitch=cc(expression,"PITCH BEND",0,"SLIDER",1,0,3,1,0xffbb9afa);
+        pitch.message="PITCH";pitch.value=64;
+        Model.Control pressure=cc(expression,"CHANNEL PRESSURE",0,"FADER",2,0,3,1,0xffffb56e);
+        pressure.message="PRESSURE";pressure.value=0;
+        return project;
+    }
+
 }

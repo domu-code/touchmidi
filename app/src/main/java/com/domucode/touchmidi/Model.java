@@ -150,6 +150,7 @@ public final class Model {
     public static final class Project {
         public String title = "UNTITLED";
         public int currentPage = 0;
+        public RollModel roll = new RollModel();
         public final ArrayList<Page> pages = new ArrayList<>();
 
         public Page page() {
@@ -163,6 +164,7 @@ public final class Model {
             try {
                 o.put("version", 1);
                 o.put("title", title); o.put("currentPage", currentPage);
+                o.put("roll", roll.toJson());
                 JSONArray arr = new JSONArray();
                 for (Page p : pages) arr.put(p.toJson());
                 o.put("pages", arr);
@@ -174,6 +176,7 @@ public final class Model {
             JSONObject root = new JSONObject(data);
             Project p = new Project();
             p.title = root.optString("title", "UNTITLED");
+            p.roll = RollModel.fromJson(root.optJSONObject("roll"));
             JSONArray arr = root.optJSONArray("pages");
             if (arr == null || arr.length() == 0 || arr.length() > 100)
                 throw new IllegalArgumentException("Layout contains no pages or too many pages");

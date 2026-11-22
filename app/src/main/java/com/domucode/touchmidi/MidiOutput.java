@@ -153,6 +153,17 @@ public final class MidiOutput {
         }
     }
 
+    public void noteOn(int channel, int pitch, int velocity) {
+        int ch = Math.max(0, Math.min(15, channel - 1));
+        bytes(0x90 | ch, Math.max(0, Math.min(127, pitch)),
+                Math.max(1, Math.min(127, velocity)));
+    }
+
+    public void noteOff(int channel, int pitch) {
+        int ch = Math.max(0, Math.min(15, channel - 1));
+        bytes(0x80 | ch, Math.max(0, Math.min(127, pitch)), 0);
+    }
+
     public void send(Model.Control c, int value) {
         int channel = Math.max(0, Math.min(15, c.channel - 1));
         int v = Math.max(0, Math.min(127, value));
